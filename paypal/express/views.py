@@ -12,7 +12,6 @@ from django.http import HttpResponseRedirect
 from django.db.models import get_model
 from django.utils.translation import ugettext_lazy as _
 
-from oscar.apps.checkout.views import PaymentDetailsView, CheckoutSessionMixin
 from oscar.apps.payment.exceptions import PaymentError, UnableToTakePayment
 from oscar.apps.payment.models import SourceType, Source
 from oscar.core.loading import get_class
@@ -30,6 +29,8 @@ Basket = get_model('basket', 'Basket')
 Repository = get_class('shipping.repository', 'Repository')
 Applicator = get_class('offer.utils', 'Applicator')
 Selector = get_class('partner.strategy', 'Selector')
+from oscar.apps.checkout.views import PaymentDetailsView
+from checkout.views import CheckoutSessionMixin
 
 
 class RedirectView(CheckoutSessionMixin, RedirectView):
@@ -138,9 +139,15 @@ class CancelResponseView(RedirectView):
         return reverse('basket:summary')
 
 
-class SuccessResponseView(PaymentDetailsView):
+class SuccessResponseView(PaymentDetailsView,CheckoutSessionMixin):
     template_name_preview = 'paypal/express/preview.html'
     preview = True
+
+    def check_preconditions(self, request):
+        """
+	Overrides default check for handling new basket state
+	"""
+        pass
 
     def get(self, request, *args, **kwargs):
         """
@@ -148,6 +155,8 @@ class SuccessResponseView(PaymentDetailsView):
         these details to show a preview of the order with a 'submit' button to
         place it.
         """
+	import logging
+	logging.getLogger('nka').info("%s  %s" % (args,kwargs))
         try:
             payer_id = request.GET['PayerID']
             token = request.GET['token']
@@ -222,6 +231,8 @@ class SuccessResponseView(PaymentDetailsView):
             return HttpResponseRedirect(reverse('basket:summary'))
 
         submission = self.build_submission(basket=basket)
+	import logging
+	logging.getLogger("nka").info(repr(submission))
         return self.submit(**submission)
 
     def build_submission(self, **kwargs):
@@ -229,6 +240,18 @@ class SuccessResponseView(PaymentDetailsView):
             SuccessResponseView, self).build_submission(**kwargs)
         # Pass the user email so it can be stored with the order
         submission['order_kwargs'] = {'guest_email': self.txn.value('EMAIL')}
+	shipad = submission['shipping_address']
+	if shipad.line2 is None:
+		shipad.line2 = ""
+	if shipad.line3 is None:
+		shipad.line3 = ""
+	if shipad.line4 is None:
+		shipad.line4 = ""
+	if shipad.state is None:
+		shipad.state = ""
+	if shipad.postcode is None:
+		shipad.postcode = ""
+
         return submission
 
     def fetch_paypal_data(self, payer_id, token):
@@ -332,9 +355,9 @@ class SuccessResponseView(PaymentDetailsView):
         name = self.txn.value('SHIPPINGOPTIONNAME')
         if not name:
             # Look to see if there is a method in the session
-            session_method = self.checkout_session.shipping_method(basket)
+            session_method = self.checkout_session.shipping_method_code(basket)
             if session_method:
-                method.name = session_method.name
+                method.name = session_method #.name
         else:
             method.name = name
         return method

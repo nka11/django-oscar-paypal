@@ -30,7 +30,7 @@ Repository = get_class('shipping.repository', 'Repository')
 Applicator = get_class('offer.utils', 'Applicator')
 Selector = get_class('partner.strategy', 'Selector')
 from oscar.apps.checkout.views import PaymentDetailsView
-from checkout.views import CheckoutSessionMixin
+from checkout.session import CheckoutSessionMixin
 
 
 class RedirectView(CheckoutSessionMixin, RedirectView):
